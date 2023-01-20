@@ -3,63 +3,84 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-type Matrice [][]int
-
-func calcul(matA, matB Matrice, canal chan int, wg *sync.WaitGroup, i, j int) {
-	var res int = 0
-	for k := 0; k < len(matA); k++ { //changer len(matA)
-		res += matA[i][k] * matB[k][j]
-	}
-	canal <- res
+type sendJob struct {
+	pointA *[][]int
+	pointB *[][]int
+	i, j   int
 }
 
-func prodMat(mat1, mat2 Matrice) Matrice {
+type endJob struct {
+	x, y, z int
+}
 
-	ligne := len(mat1)
-	col := len(mat2[0])
+var matFile1 string = "matrice1.txt"
+var matFile2 string = "matrice2.txt"
 
-	var resultat Matrice
-
-	var wg sync.WaitGroup
-	canal := make(chan int, 16)
-	for i := 0; i < ligne; i++ {
-		for j := 0; j < col; j++ {
-			wg.Add(1)
-			go func(i, j int) {
-				defer wg.Done()
-				calcul(mat1, mat2, canal, &wg, i, j)
-			}(i, j)
+func calcul(jobChan chan sendJob, resultChan chan endJob) {
+	for true {
+		job := <-jobChan
+		var res int
+		var m1 = *(job.pointA)
+		var m2 = *(job.pointB)
+		for k := 0; k < len(m2); k++ {
+			res += m1[job.i][k] * m2[k][job.j]
 		}
+		result := endJob{job.i, job.j, res}
+		resultChan <- result
+	}
+}
+
+func prodMat(MatA, MatB [][]int) [][]int {
+
+	var ligne int = len(MatA)
+	var col int = len(MatB[0])
+
+	resultat := make([][]int, ligne)
+	for m := range resultat {
+		resultat[m] = make([]int, col)
 	}
 
-	for i := 0; i < ligne; i++ {
-		for j := 0; j < col; j++ {
-			resultat[i][j] <- canal
-		}
+	jobChan := make(chan sendJob, 2)
+	resultChan := make(chan endJob, 2)
+
+	for b := 0; b < 4; b++ {
+		go calcul(jobChan, resultChan)
 	}
-	wg.Wait()
-	close(canal)
+
+	go func(MatA, MatB [][]int) {
+		for i := 0; i < ligne; i++ {
+			for j := 0; j < col; j++ {
+				job := sendJob{&MatA, &MatB, i, j}
+				jobChan <- job
+			}
+		}
+	}(MatA, MatB)
+
+	for b := 0; b < 16; b++ {
+		resultJob := <-resultChan
+		resultat[resultJob.x][resultJob.y] = resultJob.z
+
+	}
+	//close(resultChan)
+	//close(jobChan)
 	return resultat
-
 }
 
-func readMatrice(fileMat string) Matrice {
+func readMatrice(fileMat string) [][]int {
 	file, err := os.Open(fileMat)
 	if err != nil {
-		fmt.Println(err)
-		//return
+		log.Fatal(err) // affiche l'erreur et quitte la fonction
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file) // Créez un nouveau scanner pour lire le fichier
-	var matrice Matrice               // Déclarez une variable pour stocker la matrice
+	var matrice [][]int               // Déclarez une variable pour stocker la matrice
 
 	for scanner.Scan() { // Pour chaque ligne du fichier...
 
@@ -71,8 +92,7 @@ func readMatrice(fileMat string) Matrice {
 
 			num, err := strconv.Atoi(element) // Convertir l'élément en entier
 			if err != nil {
-				fmt.Println(err)
-				//return
+				log.Fatal(err)
 			}
 
 			// Ajoutez l'élément converti à la ligne
@@ -82,27 +102,40 @@ func readMatrice(fileMat string) Matrice {
 		// Ajoutez la ligne à la matrice
 		matrice = append(matrice, row)
 	}
-
-	// Affichez la matrice
 	return (matrice)
 }
 
-func main() {
-	var matFile1 string = "matrice1.txt"
-	var matFile2 string = "matrice2.txt"
-	//var mat1 = Matrice{{1, 1, 1, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {4, 4, 4, 4}}
-	//var mat2 = Matrice{{4, 4, 4, 4}, {3, 3, 3, 3}, {2, 2, 2, 2}, {1, 1, 1, 1}}
-	var mat1 Matrice = readMatrice(matFile1)
-	var mat2 Matrice = readMatrice(matFile2)
-	//print(mat1)
-	//print(mat2)
-	var result Matrice = prodMat(mat1, mat2)
+func verifMat(MatA, MatB [][]int) bool {
+	if len(MatA[0]) != len(MatB) {
+		return false
+	}
+	return true
+}
 
-	for i := 0; i < len(result); i++ {
-		for j := 0; j < len(result); j++ {
-			print((result[i][j]))
-			print(" ")
+func main() {
+	//var mat1 = [][]int{{1, 1, 1, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {4, 4, 4, 4}}
+	//var mat2 = [][]int{{4, 4, 4, 4}, {3, 3, 3, 3}, {2, 2, 2, 2}, {1, 1, 1, 1}}
+
+	var mat1 [][]int = readMatrice(matFile1)
+	var mat2 [][]int = readMatrice(matFile2)
+	var ligne int = len(mat1)
+	var col int = len(mat2)
+
+	if !verifMat(mat1, mat2) {
+		print("Erreur : impossible de multriplier les matrices.\nVeuillez verifier leurs dimensions\n")
+	} else {
+		var result = prodMat(mat1, mat2)
+		print("Le produit de la matrice A par la matrice B est :\n")
+		for i := 0; i < ligne; i++ {
+			for j := 0; j < col; j++ {
+				print((result[i][j]))
+				if result[i][j] < 10 {
+					print("  ")
+				} else {
+					print(" ")
+				}
+			}
+			println()
 		}
-		println()
 	}
 }
