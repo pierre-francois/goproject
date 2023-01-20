@@ -7,47 +7,67 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type Matrice [][]int
 
-func calcul(matA, matB Matrice, canal chan int, wg *sync.WaitGroup, i, j int) {
-	var res int = 0
-	for k := 0; k < len(matA); k++ { //changer len(matA)
-		res += matA[i][k] * matB[k][j]
-	}
-	canal <- res
+type sendJob struct {
+	pointA *Matrice
+	pointB *Matrice
+	i, j   int
 }
 
-func prodMat(mat1, mat2 Matrice) Matrice {
+type endJob struct {
+	x, y, z int
+}
 
-	ligne := len(mat1)
-	col := len(mat2[0])
+func calcul(jobChan chan sendJob, resultChan chan endJob) {
+	job := <-jobChan
+	var res int = 0
+	//for k := 0; k < 16; k++ { //changer len(matA)
+	//res += (*(job.pointA))[job.i][k] * (*(job.pointB))[k][job.j]
+	//}
+	result := new(endJob)
+	result.x = job.i
+	result.y = job.j
+	result.z = res
+	resultChan <- *result
 
+}
+
+func prodMat(MatA, MatB Matrice) Matrice {
+
+	ligne := len(MatA)
+	col := len(MatB[0])
 	var resultat Matrice
 
-	var wg sync.WaitGroup
-	canal := make(chan int, 16)
-	for i := 0; i < ligne; i++ {
-		for j := 0; j < col; j++ {
-			wg.Add(1)
-			go func(i, j int) {
-				defer wg.Done()
-				calcul(mat1, mat2, canal, &wg, i, j)
-			}(i, j)
-		}
+	jobChan := make(chan sendJob, 40)
+	resultChan := make(chan endJob, 40)
+
+	for b := 0; b < 5; b++ {
+		go calcul(jobChan, resultChan)
 	}
 
-	for i := 0; i < ligne; i++ {
-		for j := 0; j < col; j++ {
-			resultat[i][j] <- canal
+	go func(MatA, MatB Matrice) {
+		for i := 0; i < ligne; i++ {
+			for j := 0; j < col; j++ {
+				job := new(sendJob)
+				job.i = i
+				job.j = j
+				job.pointA = (&MatA)
+				job.pointB = (&MatB)
+				jobChan <- *job
+			}
 		}
+	}(MatA, MatB)
+
+	for b := 0; b < 16; b++ {
+		resultJob := <-resultChan
+		resultat[resultJob.x][resultJob.y] = resultJob.z
 	}
-	wg.Wait()
-	close(canal)
+	close(resultChan)
+	close(jobChan)
 	return resultat
-
 }
 
 func readMatrice(fileMat string) Matrice {
@@ -88,12 +108,12 @@ func readMatrice(fileMat string) Matrice {
 }
 
 func main() {
-	var matFile1 string = "matrice1.txt"
-	var matFile2 string = "matrice2.txt"
-	//var mat1 = Matrice{{1, 1, 1, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {4, 4, 4, 4}}
-	//var mat2 = Matrice{{4, 4, 4, 4}, {3, 3, 3, 3}, {2, 2, 2, 2}, {1, 1, 1, 1}}
-	var mat1 Matrice = readMatrice(matFile1)
-	var mat2 Matrice = readMatrice(matFile2)
+	//var matFile1 string = "matrice1.txt"
+	//var matFile2 string = "matrice2.txt"
+	var mat1 = Matrice{{1, 1, 1, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {4, 4, 4, 4}}
+	var mat2 = Matrice{{4, 4, 4, 4}, {3, 3, 3, 3}, {2, 2, 2, 2}, {1, 1, 1, 1}}
+	//var mat1 Matrice = readMatrice(matFile1)
+	//var mat2 Matrice = readMatrice(matFile2)
 	//print(mat1)
 	//print(mat2)
 	var result Matrice = prodMat(mat1, mat2)
