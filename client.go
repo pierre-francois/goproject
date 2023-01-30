@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -9,65 +10,58 @@ import (
 
 const (
 	HOST = "localhost"
-	PORT = "8000"
+	PORT = "9090"
 	TYPE = "tcp"
 )
 
 func main() {
 	tcpServer, err := net.ResolveTCPAddr(TYPE, HOST+":"+PORT)
-	print("Tentative de connexion...\n")
-
+	fmt.Println("Trying to connect to server...")
 	if err != nil {
-		println("ResolveTCPAddr failed:", err.Error())
+		fmt.Println("ResolveTCPAddr failed:", err.Error())
 		os.Exit(1)
 	}
-	//connexion au socket
+
 	conn, err := net.DialTCP(TYPE, nil, tcpServer)
 	if err != nil {
-		println("Dial failed:", err.Error())
-		os.Exit(1)
-	}
-	print("Connexion établie !\n")
-
-	byte1, _ := os.ReadFile("matrice1.txt")
-	fmt.Printf("Taille des donées envoyées : %v\n", len(byte1))
-
-	_, err = conn.Write(byte1) //envoi des données
-	if err != nil {
-		println("Write data failed:", err.Error())
+		fmt.Println("Dial failed:", err.Error())
 		os.Exit(1)
 	}
 
-	byte2, _ := os.ReadFile("matrice2.txt")
-	fmt.Printf("Taille des donées envoyées : %v\n", len(byte2))
-	_, err = conn.Write(byte2)
-	if err != nil {
-		println("Write data failed:", err.Error())
-		os.Exit(1)
+	fmt.Println("Connected !")
+
+	filetosend, _ := os.Open("matrice.txt")
+	_, errr := io.Copy(conn, filetosend)
+	if errr != nil {
+		log.Fatal(errr)
+		return
 	}
 
-	buffer2 := make([]byte, 1024) //taille du buffer a set en fonction de la taille de la donnée reçue
-	__, err := conn.Read(buffer2) //lis données reçues et les stocke dans le buffer (ce sont des bytes)
+	/* fi, _ := filetosend.Stat()
+	if sentData != fi.Size() {
+		fmt.Println("Erreur, je n'ai pas envoyé le bon nombre de bytes")
+		return
+	}
+	fmt.Print("Bytes sent: ", sentData, "\n") */
+
+	buffer := make([]byte, 4096)   //taille du buffer qui reçoit les données
+	data, err := conn.Read(buffer) //lit données reçues et les stocke dans le buffer (cbytes)
 	if err != nil {
 		log.Fatal(err)
-		print(__)
+		print("erreur")
 	}
-	print(string(buffer2))
 
-	file, err := os.Create("resultatFinal.txt")
+	file, err := os.Create("resultFile.txt") //crée le fichier où l'on va stocker le résultat
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-	n1, err := file.Write(buffer2)
-	fmt.Printf("wrote %d bytes\n", n1)
-	conn.Close()
 
-	/* n, err := conn.Read(buf)
+	n1, err := file.Write(buffer[:data]) // on parcourt le buffer jusqu'à data, taille des données reçues du serveu (le reste est inutile), puis on écrit ces données dans le fichier créé
+	fmt.Printf("Received %d bytes\n", n1)
 	if err != nil {
-		conn.Close()
+		log.Fatal(err)
+		return
 	}
-	if n == 0 {
-		conn.Close()
-	} */
+	fmt.Println("Results were written in resultFile.txt")
 }

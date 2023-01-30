@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
+	"bufio"
 	"fmt"
 	"log"
-	"net" // for socket resources
-	"os"  // for OS resources
+	"net"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -17,96 +16,89 @@ type sendJob struct {
 	i, j   int
 }
 
+var A [][]int
+var B [][]int
+
 type endJob struct {
 	x, y, z int
 }
 
 const (
-	Buffer    = 1024 //This constant can be anything from 1 to 65495, because the TCP package can only contain up to 65495 bytes of payload. It will define how big the chunks are of the file that we will send in bytes.
-	host      = "localhost"
-	port      = "8000"
-	protocole = "tcp"
+	HOST = "localhost"
+	PORT = "9090"
+	TYPE = "tcp"
 )
 
-//RAJOUTER FUNC GESTION ERREUR
-
-func byteToInt(byteSlice []byte) [][]int {
-	//byteSlice := []byte("1 2 3\n4 5 6\n7 8 9")
-
-	// Split the byte slice into rows using the newline character
-	rows := bytes.Split(byteSlice, []byte("\n"))
-
-	// Create an empty 2D slice to store the data
-	data := make([][]string, len(rows))
-
-	// Iterate over the rows and split each one into columns using the comma character
-	for i, row := range rows {
-		data[i] = strings.Split(string(row), " ")
+func main() {
+	listen, err := net.Listen(TYPE, HOST+":"+PORT)
+	print("En attente de conexion...\n")
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
 	}
 
-	int2D := make([][]int, len(data))
-	for i := range int2D {
-		int2D[i] = make([]int, len(data[i]))
-	}
-
-	// Convert 2D string to 2D int
-	for i := range data {
-		for j := range data[i] {
-			intVal, _ := strconv.Atoi(data[i][j])
-			int2D[i][j] = intVal
+	for {
+		con, err := listen.Accept() //accepte la connexion
+		if err != nil {
+			log.Fatal(err)
+			os.Exit(1)
 		}
+		go traiterRequete(con) //une go routine par requete client
 	}
 
-	//fmt.Println(int2D)
-	// Output: [[1 2 3] [4 5 6]]
-	return int2D
-}
-func intToByte(Mat *[][]int) []byte {
-	MAT := *Mat
-	var buf bytes.Buffer
-	// Boucler sur chaque élément du slice et les encoder en bytes
-	for _, row := range MAT {
-		for _, val := range row {
-			binary.Write(&buf, binary.LittleEndian, val)
-		}
-	}
-	// Récupérer le tableau de bytes final
-	byteArray := buf.Bytes()
-	return byteArray
+	listen.Close() //jamais atteint, boucle while juste au-dessus
 }
 
 func traiterRequete(con net.Conn) {
-	buffer := make([]byte, 32) //taille du buffer a set en fonction de la taille de la donnée reçue
-	_, err := con.Read(buffer) //lis données reçues et les stocke dans le buffer (ce sont des bytes)
-	if err != nil {
-		log.Fatal(err)
-	}
-	mat1 := byteToInt(buffer)
-	var pmat1 *[][]int
-	pmat1 = &mat1
+	fmt.Println("Connexion réussie avec le client !!!")
 
-	buffer2 := make([]byte, 32) //taille du buffer a set en fonction de la taille de la donnée reçue
-	a, err := con.Read(buffer2) //lis données reçues et les stocke dans le buffer (ce sont des bytes)
-	if err != nil {
-		log.Fatal(err)
-		print(a)
-	}
-	mat2 := byteToInt(buffer2)
-	var pmat2 *[][]int
-	pmat2 = &mat2
-	var matResult [][]int
-	matResult = prodMat(pmat1, pmat2)
-	pmatResult := &matResult
-	byte := intToByte(pmatResult)
-	fmt.Printf("Taille des donées envoyées : %v\n", len(byte))
+	reader := bufio.NewReader(con) //lit le contenu des données envoyées par le client
 
-	_, err = con.Write(byte) //envoi des données
-	if err != nil {
-		println("Write data failed:", err.Error())
-		os.Exit(1)
+	fileData, _ := reader.ReadString(';') //récupère le contenu correspondant à la première matrice
+	mat1 := fileData[:len(fileData)-1]    //supprime le point virgule
+	lines := strings.Split(mat1, "\n")    //sépre les données par lignes
+	MatA := make([][]int, len(lines))     //crée le slice où l'on va stocker la matrice
+	for i, line := range lines {          //pour chaque ligne obtenue
+		values := strings.Split(line, " ") //on sépare les valeurs espcées d'un " "
+		MatA[i] = make([]int, len(values))
+		for j, value := range values {
+			num, _ := strconv.Atoi(value) //on convertit l'élément en entier
+			MatA[i][j] = num              //on le copie dans la matrice
+		}
 	}
-	// close conn
-	//con.Close()
+
+	fileData2, _ := reader.ReadString(';')  // on prend le contenu correspondant à la mtrice suivante ...
+	mat2 := fileData2[1 : len(fileData2)-1] //on supprime le point virgule et un caractère en trop au déut (pk ????)
+	lines2 := strings.Split(mat2, "\n")
+	MatB := make([][]int, len(lines2))
+	for i, line := range lines2 {
+		values2 := strings.Split(line, " ")
+		MatB[i] = make([]int, len(values2))
+		for j, value := range values2 {
+			num, _ := strconv.Atoi(value)
+			MatB[i][j] = num
+		}
+	}
+
+	fmt.Println(MatA)
+	fmt.Println(MatB)
+
+	result := prodMat(MatA, MatB) //on calcul le produit matriciel
+	toSend := intToString(result) //on convertit en string le resultat
+
+	fmt.Print(toSend)
+	con.Write([]byte(toSend)) //on convertit en byte et on envoie
+	con.Close()
+}
+func intToString(arr [][]int) string {
+	var str string
+	for _, row := range arr {
+		for _, item := range row {
+			str += fmt.Sprint(item) + " "
+		}
+		str = strings.TrimRight(str, " ") + "\n"
+	}
+	return str
 }
 func calcul(jobChan chan sendJob, resultChan chan endJob) {
 
@@ -125,10 +117,8 @@ func calcul(jobChan chan sendJob, resultChan chan endJob) {
 	}
 }
 
-func prodMat(Mata, Matb *[][]int) [][]int {
+func prodMat(MatA, MatB [][]int) [][]int {
 
-	MatA := *Mata
-	MatB := *Matb
 	var ligne int = len(MatA)
 	var col int = len(MatB[0])
 
@@ -144,41 +134,21 @@ func prodMat(Mata, Matb *[][]int) [][]int {
 		go calcul(jobChan, resultChan)
 	}
 
-	go func(Mata, Matb *[][]int) { //on push des jobs de structure sendJob dans le channel jobChan
+	go func(MatA, MatB [][]int) { //on push des jobs de structure sendJob dans le channel jobChan
 		for i := 0; i < ligne; i++ {
 			for j := 0; j < col; j++ {
-				job := sendJob{Mata, Matb, i, j}
+				job := sendJob{&MatA, &MatB, i, j}
 				jobChan <- job
 			}
 		}
-	}(Mata, Matb)
+	}(MatA, MatB)
 
 	for b := 0; b < 16; b++ { //on vide le channel de resultat sous forme de structure endJob
 		resultJob := <-resultChan
 		resultat[resultJob.x][resultJob.y] = resultJob.z
 
 	}
-	//close(resultChan) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	//close(jobChan) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	return (resultat)
-}
-func main() {
-	listener, err := net.Listen(protocole, host+":"+port)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(1)
-	}
-
-	// interet ???
-	defer listener.Close()
-
-	print("Serveur démarré, en attente de connexion.\n")
-	for {
-		con, err := listener.Accept()
-		if err != nil {
-			log.Fatal(err)
-			os.Exit(1)
-		}
-		go traiterRequete(con) // Action a executer une go routine par requete
-	}
+	//close(resultChan)
+	//close(jobChan)
+	return resultat
 }
