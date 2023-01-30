@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type sendJob struct {
@@ -24,9 +25,11 @@ type endJob struct {
 }
 
 const (
-	HOST = "localhost"
-	PORT = "9090"
-	TYPE = "tcp"
+	nbWorker = 4
+	sizeChan = 3
+	HOST     = "localhost"
+	PORT     = "8000"
+	TYPE     = "tcp"
 )
 
 func main() {
@@ -60,10 +63,10 @@ func traiterRequete(con net.Conn) {
 	MatA := make([][]int, len(lines))     //crée le slice où l'on va stocker la matrice
 	for i, line := range lines {          //pour chaque ligne obtenue
 		values := strings.Split(line, " ") //on sépare les valeurs espcées d'un " "
-		MatA[i] = make([]int, len(values))
-		for j, value := range values {
+		MatA[i] = make([]int, len(values)) //chaque ligne de la matrice a la taille de values <-> nb éléments dans la ligne lue (line)
+		for j, value := range values {     //pour chaque élément de la ligne
 			num, _ := strconv.Atoi(value) //on convertit l'élément en entier
-			MatA[i][j] = num              //on le copie dans la matrice
+			MatA[i][j] = num              //on le copie dans la matrice à sa place
 		}
 	}
 
@@ -83,20 +86,23 @@ func traiterRequete(con net.Conn) {
 	fmt.Println(MatA)
 	fmt.Println(MatB)
 
-	result := prodMat(MatA, MatB) //on calcul le produit matriciel
-	toSend := intToString(result) //on convertit en string le resultat
+	startTime := time.Now()
+	result := prodMat(MatA, MatB)     //on calcul le produit matriciel
+	duration := time.Since(startTime) //temps d'execution du calcul
+	fmt.Printf("Execution time ! %v\n", duration)
 
-	fmt.Print(toSend)
-	con.Write([]byte(toSend)) //on convertit en byte et on envoie
+	toSend := intToString(result) //on convertit en string le resultat
+	fmt.Print(toSend)             //résultat du calcul
+	con.Write([]byte(toSend))     //on convertit en byte et on envoie
 	con.Close()
 }
 func intToString(arr [][]int) string {
 	var str string
 	for _, row := range arr {
 		for _, item := range row {
-			str += fmt.Sprint(item) + " "
+			str += fmt.Sprint(item) + " " //espace chaque élément de la ligne de la matrice dans le string
 		}
-		str = strings.TrimRight(str, " ") + "\n"
+		str = strings.TrimRight(str, " ") + "\n" //rajoute un espace et le caractère \n a la fin de la ligne
 	}
 	return str
 }
@@ -127,10 +133,10 @@ func prodMat(MatA, MatB [][]int) [][]int {
 		resultat[m] = make([]int, col)
 	}
 
-	jobChan := make(chan sendJob, 2)
-	resultChan := make(chan endJob, 2)
+	jobChan := make(chan sendJob, sizeChan)
+	resultChan := make(chan endJob, sizeChan)
 
-	for b := 0; b < 4; b++ {
+	for b := 0; b < nbWorker; b++ {
 		go calcul(jobChan, resultChan)
 	}
 
@@ -143,7 +149,7 @@ func prodMat(MatA, MatB [][]int) [][]int {
 		}
 	}(MatA, MatB)
 
-	for b := 0; b < 16; b++ { //on vide le channel de resultat sous forme de structure endJob
+	for b := 0; b < (ligne * col); b++ { //on vide le channel de resultat sous forme de structure endJob
 		resultJob := <-resultChan
 		resultat[resultJob.x][resultJob.y] = resultJob.z
 
