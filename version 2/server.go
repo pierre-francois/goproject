@@ -58,10 +58,11 @@ func traiterRequete(con net.Conn) {
 	reader := bufio.NewReader(con) //lit le contenu des données envoyées par le client
 
 	fileData, _ := reader.ReadString(';') //récupère le contenu correspondant à la première matrice
-	mat1 := fileData[:len(fileData)-1]    //supprime le point virgule
-	lines := strings.Split(mat1, "\n")    //sépre les données par lignes
-	MatA := make([][]int, len(lines))     //crée le slice où l'on va stocker la matrice
-	for i, line := range lines {          //pour chaque ligne obtenue
+	//matA:=getMatrix(fileData)
+	mat1 := fileData[:len(fileData)-1] //supprime le point virgule
+	lines := strings.Split(mat1, "\n") //sépre les données par lignes
+	MatA := make([][]int, len(lines))  //crée le slice où l'on va stocker la matrice
+	for i, line := range lines {       //pour chaque ligne obtenue
 		values := strings.Split(line, " ") //on sépare les valeurs espcées d'un " "
 		MatA[i] = make([]int, len(values)) //chaque ligne de la matrice a la taille de values <-> nb éléments dans la ligne lue (line)
 		for j, value := range values {     //pour chaque élément de la ligne
@@ -106,6 +107,7 @@ func intToString(arr [][]int) string {
 	}
 	return str
 }
+
 func calcul(jobChan chan sendJob, resultChan chan endJob) {
 
 	for true {
