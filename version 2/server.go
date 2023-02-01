@@ -44,7 +44,6 @@ func main() {
 		con, err := listen.Accept() //accepte la connexion
 		if err != nil {
 			log.Fatal(err)
-			os.Exit(1)
 		}
 		go traiterRequete(con) //une go routine par requete client
 	}
@@ -57,8 +56,10 @@ func traiterRequete(con net.Conn) {
 
 	reader := bufio.NewReader(con) //lit le contenu des données envoyées par le client
 
-	fileData, _ := reader.ReadString(';') //récupère le contenu correspondant à la première matrice
-	//matA:=getMatrix(fileData)
+	fileData, err := reader.ReadString(';') //récupère le contenu correspondant à la première matrice
+	if err != nil {
+		log.Fatal(err)
+	}
 	mat1 := fileData[:len(fileData)-1] //supprime le point virgule
 	lines := strings.Split(mat1, "\n") //sépre les données par lignes
 	MatA := make([][]int, len(lines))  //crée le slice où l'on va stocker la matrice
@@ -71,7 +72,10 @@ func traiterRequete(con net.Conn) {
 		}
 	}
 
-	fileData2, _ := reader.ReadString(';')  // on prend le contenu correspondant à la mtrice suivante ...
+	fileData2, err := reader.ReadString(';') // on prend le contenu correspondant à la mtrice suivante ...
+	if err != nil {
+		log.Fatal(err)
+	}
 	mat2 := fileData2[1 : len(fileData2)-1] //on supprime le point virgule et un caractère en trop au déut (pk ????)
 	lines2 := strings.Split(mat2, "\n")
 	MatB := make([][]int, len(lines2))
@@ -97,13 +101,13 @@ func traiterRequete(con net.Conn) {
 	con.Write([]byte(toSend))     //on convertit en byte et on envoie
 	con.Close()
 }
-func intToString(arr [][]int) string {
+func intToString(tab [][]int) string {
 	var str string
-	for _, row := range arr {
+	for _, row := range tab {
 		for _, item := range row {
-			str += fmt.Sprint(item) + " " //espace chaque élément de la ligne de la matrice dans le string
+			str += fmt.Sprint(item) + " " //ajoute un esapce après chaque élément dans la ligne
 		}
-		str = strings.TrimRight(str, " ") + "\n" //rajoute un espace et le caractère \n a la fin de la ligne
+		str = strings.TrimRight(str, " ") + "\n" //supprime l'espace à la fin de la ligne et rajoute un retour à la ligne
 	}
 	return str
 }
