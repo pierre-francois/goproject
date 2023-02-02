@@ -14,7 +14,7 @@ As far as Go project is concerned, we had to create program that runs a matrix p
 
 ### How to run and use the program 
 
-0. First, make sure golang is installed on your device
+0. First, make sure golang is installed on your device (if not, check this [page](https://go.dev/doc/install))
 1. Download the code and unzip it
 2. Go to Version 2 folder and open two terminals
 3. First type 'go run server.go' in a terminal and then 'go run client.go' in the other one
